@@ -92,7 +92,11 @@ func (launcher *Launcher) Wait() error {
 	if err != nil {
 		return fmt.Errorf("failed to await process: %v", err)
 	}
-	launcher.Cleanup(state.ExitCode())
+	var exitCode int = 0
+	if status, ok := state.Sys().(syscall.WaitStatus); ok {
+		exitCode = status.ExitStatus()
+	}
+	launcher.Cleanup(exitCode)
 	return nil
 }
 
