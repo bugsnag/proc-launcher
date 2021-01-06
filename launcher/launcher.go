@@ -5,13 +5,16 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"sync"
 	"syscall"
+	"time"
 )
 
 type Launcher struct {
 	args    []string
 	plugins []interface{}
 	process *os.Process
+	group *sync.WaitGroup
 }
 
 type StdoutPlugin interface {
@@ -31,24 +34,27 @@ func New(args ...string) *Launcher {
 		args,
 		make([]interface{}, 0),
 		nil,
+		&sync.WaitGroup{},
 	}
 }
 
+// Run the launcher command, configuring pipe forwarding and plugins
 func (launcher *Launcher) Start() (err error) {
 	args := launcher.args
 	if args[0], err = exec.LookPath(args[0]); err == nil {
 		stdin_r, stdin_w := launcher.openPipe()
 		stdout_r, stdout_w := launcher.openPipe()
 		stderr_r, stderr_w := launcher.openPipe()
-		go connectPipes(os.Stdin, stdin_w, nil)
-		go connectPipes(stdout_r, os.Stdout, func(contents []byte) {
+		launcher.group.Add(2)
+		go connectPipes(nil, os.Stdin, stdin_w, nil)
+		go connectPipes(launcher.group, stdout_r, os.Stdout, func(contents []byte) {
 			for _, plugin := range launcher.plugins {
 				if handler, ok := plugin.(StdoutPlugin); ok {
 					handler.ReadStdout(contents)
 				}
 			}
 		})
-		go connectPipes(stderr_r, os.Stderr, func(contents []byte) {
+		go connectPipes(launcher.group, stderr_r, os.Stderr, func(contents []byte) {
 			for _, plugin := range launcher.plugins {
 				if handler, ok := plugin.(StderrPlugin); ok {
 					handler.ReadStderr(contents)
@@ -72,11 +78,13 @@ func (launcher *Launcher) Start() (err error) {
 	return err
 }
 
+// Install a plugin which conforms to StdoutPlugin, StderrPlugin, and/or
+// ShutdownPlugin.
 func (launcher *Launcher) InstallPlugin(plugin interface{}) {
 	launcher.plugins = append(launcher.plugins, plugin)
 }
 
-func (launcher *Launcher) Cleanup(code int) {
+func (launcher *Launcher) cleanup(code int) {
 	for _, plugin := range launcher.plugins {
 		if handler, ok := plugin.(ShutdownPlugin); ok {
 			handler.AtExit(code)
@@ -84,6 +92,8 @@ func (launcher *Launcher) Cleanup(code int) {
 	}
 }
 
+// Wait for the launched process to terminate. Should only be called after
+// Start().
 func (launcher *Launcher) Wait() error {
 	if launcher.process == nil {
 		return fmt.Errorf("process not yet started")
@@ -96,14 +106,15 @@ func (launcher *Launcher) Wait() error {
 	if status, ok := state.Sys().(syscall.WaitStatus); ok {
 		exitCode = status.ExitStatus()
 	}
-	launcher.Cleanup(exitCode)
+	launcher.group.Wait()
+	launcher.cleanup(exitCode)
 	return nil
 }
 
 func (launcher *Launcher) openPipe() (*os.File, *os.File) {
 	r, w, err := os.Pipe()
 	if err != nil {
-		launcher.Cleanup(-1)
+		launcher.cleanup(-1)
 		os.Stderr.WriteString(fmt.Sprintf("failed to open pipe: %v", err))
 	}
 	return r, w
@@ -118,9 +129,15 @@ func (launcher *Launcher) forwardSignals(notifications chan os.Signal) {
 	}
 }
 
-func connectPipes(in *os.File, out *os.File, handler func([]byte)) {
+func connectPipes(group *sync.WaitGroup, in *os.File, out *os.File, handler func([]byte)) {
+	defer func() {
+		if group != nil {
+			group.Done()
+		}
+	}()
 	contents := make([]byte, 16)
 	for {
+		in.SetReadDeadline(time.Now().Add(time.Second))
 		count, err := in.Read(contents)
 		if count > 0 {
 			out.Write(contents)
@@ -128,8 +145,10 @@ func connectPipes(in *os.File, out *os.File, handler func([]byte)) {
 				handler(contents)
 			}
 		}
-		if err != nil {
-			out.Close()
+		if err != nil && !isDeadlineExceededErr(err) {
+			break
+		}
+		if count, err = in.Write([]byte{}); err != nil || count < 0 {
 			break
 		}
 	}
