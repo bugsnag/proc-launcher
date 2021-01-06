@@ -14,7 +14,7 @@ type Launcher struct {
 	args    []string
 	plugins []interface{}
 	process *os.Process
-	group *sync.WaitGroup
+	group   *sync.WaitGroup
 }
 
 type StdoutPlugin interface {

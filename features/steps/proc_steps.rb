@@ -10,6 +10,7 @@ When("I run the extension executable with {string}") do |args|
     start_process("./extension", args)
   end
 end
+
 When("I run the extension executable with arguments:") do |table|
   Dir.chdir(BUILD_DIR) do
     args = table.raw.flatten

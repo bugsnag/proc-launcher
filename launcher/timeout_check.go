@@ -3,8 +3,8 @@
 package launcher
 
 import (
-	"os"
 	"errors"
+	"os"
 )
 
 func isDeadlineExceededErr(err error) bool {

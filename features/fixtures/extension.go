@@ -9,9 +9,9 @@ import (
 	l "github.com/bugsnag/proc-launcher/launcher"
 )
 
-type extension struct{
+type extension struct {
 	buffer *bufio.Writer
-	group *sync.WaitGroup
+	group  *sync.WaitGroup
 }
 
 func (ex extension) ReadStdout(bytes []byte) {
@@ -38,7 +38,7 @@ func New() extension {
 		bufio.NewWriter(os.Stdout),
 		&sync.WaitGroup{},
 	}
-	
+
 	ex.group.Add(1)
 	return ex
 }

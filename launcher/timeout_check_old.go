@@ -9,4 +9,3 @@ import (
 func isDeadlineExceededErr(err error) bool {
 	return err != nil && os.IsTimeout(err)
 }
-
