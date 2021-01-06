@@ -13,7 +13,7 @@ After do
   PROCESSES.each do |p|
     begin
       if VERBOSE
-        puts p[:stderr].read
+        Kernel.puts p[:stderr].read
       end
       Process.kill 'KILL', p[:thread][:pid]
     rescue
