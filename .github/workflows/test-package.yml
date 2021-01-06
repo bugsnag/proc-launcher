@@ -1,0 +1,57 @@
+name: Test
+
+on: [ push, pull_request ]
+
+jobs:
+  test:
+
+    runs-on: ubuntu-20.04
+    defaults:
+      run:
+        working-directory: 'go/src/github.com/bugsnag/proc-launcher' # relative to $GITHUB_WORKSPACE
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ['1.11', '1.12', '1.13', '1.14', '1.15']
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        path: 'go/src/github.com/bugsnag/proc-launcher' # relative to $GITHUB_WORKSPACE
+    - name: setup go ${{ matrix.go-version }}
+      run: |
+        curl --silent --location --output gimme https://github.com/travis-ci/gimme/raw/v1.5.4/gimme
+        chmod +x ./gimme
+        eval "$(./gimme ${{ matrix.go-version }})"
+        echo "GOOS=" >> $GITHUB_ENV
+        echo "GOARCH=" >> $GITHUB_ENV
+        echo "GOROOT=$GOROOT" >> $GITHUB_ENV
+        echo "PATH=$PATH" >> $GITHUB_ENV
+        echo "GIMME_ENV=$GIMME_ENV" >> $GITHUB_ENV
+        echo "GOPATH=$GITHUB_WORKSPACE/go" >> $GITHUB_ENV
+    - name: install dependencies
+      run: go get -v -d ./...
+    - name: run unit tests
+      run: go test -v ./...
+    - name: vet package
+      run: go vet ./...
+
+    - name: set up ruby (for integration env)
+      uses: actions/setup-ruby@v1
+      with:
+        ruby-version: '2.6'
+    - name: install bundler
+      run: gem install bundler --quiet --silent
+    - uses: actions/cache@v2
+      with:
+        path: vendor/bundle
+        key: ${{ runner.os }}-gems-${{ hashFiles('**/Gemfile.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-gems-
+    - name: install integration dependencies
+      run: |
+        bundle config path vendor/bundle
+        bundle install --jobs 4 --retry 3
+    - name: run integration tests
+      run: bundle exec cucumber --color
+
