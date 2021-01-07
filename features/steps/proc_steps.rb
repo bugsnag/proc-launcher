@@ -19,11 +19,11 @@ When("I run the extension executable with arguments:") do |table|
 end
 
 Then("{string} is present in the standard output stream") do |contents|
-  expect(PROCESSES[-1][:stdout].read).to include contents
+  expect(PROCESSES[-1][:stdout].read).to include contents.gsub("\\n", "\n")
 end
 
 Then("{string} is present in the standard error stream") do |contents|
-  expect(PROCESSES[-1][:stderr].read).to include contents
+  expect(PROCESSES[-1][:stderr].read).to include contents.gsub("\\n", "\n")
 end
 
 Given("I build the executable") do
