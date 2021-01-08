@@ -136,8 +136,15 @@ func connectPipes(group *sync.WaitGroup, in *os.File, out *os.File, handler func
 		}
 	}()
 	contents := make([]byte, 512)
+	shouldQuit := false
 	for {
-		in.SetReadDeadline(time.Now().Add(time.Millisecond * 100))
+		now := time.Now()
+		if shouldQuit {
+			// grant extra time for final read since shutdown imminent
+			in.SetReadDeadline(now.Add(time.Second))
+		} else {
+			in.SetReadDeadline(now.Add(time.Millisecond * 100))
+		}
 		count, err := in.Read(contents)
 		for count > 0 {
 			slice := contents[0:count]
@@ -147,11 +154,11 @@ func connectPipes(group *sync.WaitGroup, in *os.File, out *os.File, handler func
 			}
 			count, err = in.Read(contents)
 		}
-		if err != nil && !isDeadlineExceededErr(err) {
+		if shouldQuit || (err != nil && !isDeadlineExceededErr(err)) {
 			break
 		}
 		if count, err = in.Write([]byte{}); err != nil || count < 0 {
-			break
+			shouldQuit = true
 		}
 	}
 }
