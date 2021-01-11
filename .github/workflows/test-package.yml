@@ -5,32 +5,27 @@ on: [ push, pull_request ]
 jobs:
   test:
 
-    runs-on: ubuntu-20.04
+    runs-on: ${{ matrix.os }}-latest
     defaults:
       run:
         working-directory: 'go/src/github.com/bugsnag/proc-launcher' # relative to $GITHUB_WORKSPACE
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu, windows]
         go-version: ['1.11', '1.12', '1.13', '1.14', '1.15']
 
     steps:
     - uses: actions/checkout@v2
       with:
         path: 'go/src/github.com/bugsnag/proc-launcher' # relative to $GITHUB_WORKSPACE
-    - name: setup go ${{ matrix.go-version }}
+    - name: set GOPATH
       run: |
-        curl --silent --location --output gimme https://github.com/travis-ci/gimme/raw/v1.5.4/gimme
-        chmod +x ./gimme
-        eval "$(./gimme ${{ matrix.go-version }})"
-        echo "GOOS=" >> $GITHUB_ENV
-        echo "GOARCH=" >> $GITHUB_ENV
-        echo "GOROOT=$GOROOT" >> $GITHUB_ENV
-        echo "PATH=$PATH" >> $GITHUB_ENV
-        echo "GIMME_ENV=$GIMME_ENV" >> $GITHUB_ENV
-        echo "GOPATH=$GITHUB_WORKSPACE/go" >> $GITHUB_ENV
-    - name: install dependencies
-      run: go get -v -d ./...
+        echo $GITHUB_WORKSPACE
+        bash -c 'echo "GOPATH=$GITHUB_WORKSPACE/go" >> $GITHUB_ENV'
+    - uses: actions/setup-go@v2
+      with:
+        go-version: ${{ matrix.go-version }}
     - name: run unit tests
       run: go test -v ./...
     - name: vet package
