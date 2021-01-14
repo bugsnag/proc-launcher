@@ -15,6 +15,7 @@ type Launcher struct {
 	plugins []interface{}
 	process *os.Process
 	group   *sync.WaitGroup
+	done    chan bool
 }
 
 type StdoutPlugin interface {
@@ -35,6 +36,7 @@ func New(args ...string) *Launcher {
 		make([]interface{}, 0),
 		nil,
 		&sync.WaitGroup{},
+		make(chan bool),
 	}
 }
 
@@ -46,15 +48,15 @@ func (launcher *Launcher) Start() (err error) {
 		stdout_r, stdout_w := launcher.openPipe()
 		stderr_r, stderr_w := launcher.openPipe()
 		launcher.group.Add(2)
-		go connectPipes(nil, os.Stdin, stdin_w, nil)
-		go connectPipes(launcher.group, stdout_r, os.Stdout, func(contents []byte) {
+		go connectPipes(nil, launcher.done, os.Stdin, stdin_w, nil)
+		go connectPipes(launcher.group, launcher.done, stdout_r, os.Stdout, func(contents []byte) {
 			for _, plugin := range launcher.plugins {
 				if handler, ok := plugin.(StdoutPlugin); ok {
 					handler.ReadStdout(contents)
 				}
 			}
 		})
-		go connectPipes(launcher.group, stderr_r, os.Stderr, func(contents []byte) {
+		go connectPipes(launcher.group, launcher.done, stderr_r, os.Stderr, func(contents []byte) {
 			for _, plugin := range launcher.plugins {
 				if handler, ok := plugin.(StderrPlugin); ok {
 					handler.ReadStderr(contents)
@@ -106,6 +108,7 @@ func (launcher *Launcher) Wait() error {
 	if status, ok := state.Sys().(syscall.WaitStatus); ok {
 		exitCode = status.ExitStatus()
 	}
+	close(launcher.done)
 	launcher.group.Wait()
 	launcher.cleanup(exitCode)
 	return nil
@@ -129,7 +132,9 @@ func (launcher *Launcher) forwardSignals(notifications chan os.Signal) {
 	}
 }
 
-func connectPipes(group *sync.WaitGroup, in *os.File, out *os.File, handler func([]byte)) {
+// Read input from in and send to out, copying to the handler if any.
+// Once in or the channel is closed, clean up and signal the wait group.
+func connectPipes(group *sync.WaitGroup, done chan bool, in *os.File, out *os.File, handler func([]byte)) {
 	completedGroup := false
 	defer func() {
 		if group != nil && !completedGroup {
@@ -163,8 +168,11 @@ func connectPipes(group *sync.WaitGroup, in *os.File, out *os.File, handler func
 		if shouldQuit || (err != nil && !isDeadlineExceededErr(err)) {
 			break
 		}
-		if count, err = in.Write([]byte{}); err != nil || count < 0 {
+		select {
+		case <-done:
 			shouldQuit = true
+		default:
+			// done is not closed
 		}
 	}
 }
