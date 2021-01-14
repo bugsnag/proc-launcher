@@ -22,7 +22,7 @@ After do
 end
 
 at_exit do
-  FileUtils.rm_r BUILD_DIR
+  FileUtils.remove_dir(BUILD_DIR, true)
 end
 
 def start_process args

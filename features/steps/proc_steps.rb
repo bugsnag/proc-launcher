@@ -1,20 +1,31 @@
+require 'os'
+
+def executable name
+  return "./#{name}.exe" if OS.windows?
+  return "./#{name}"
+end
+
 Given("I build the extension executable") do
   Dir.chdir(BUILD_DIR) do
     `go build ../features/fixtures/extension.go`
-    expect(File.exists? "extension").to be_truthy
+    expect(File.exists? executable("extension")).to be_truthy
   end
+end
+
+Given("I am using a POSIX-compliant system") do
+  skip_this_scenario if OS.windows?
 end
 
 When("I run the extension executable with {string}") do |args|
   Dir.chdir(BUILD_DIR) do
-    start_process("./extension", args)
+    start_process(executable("./extension"), args)
   end
 end
 
 When("I run the extension executable with arguments:") do |table|
   Dir.chdir(BUILD_DIR) do
     args = table.raw.flatten
-    start_process(["./extension"] + args)
+    start_process([executable("./extension")] + args)
   end
 end
 
@@ -29,14 +40,14 @@ end
 Given("I build the executable") do
   Dir.chdir(BUILD_DIR) do
     `go build ../main.go`
-    expect(File.exists? "main").to be_truthy
+    expect(File.exists? executable("./main")).to be_truthy
   end
 end
 
 When("I run the executable with arguments:") do |table|
   Dir.chdir(BUILD_DIR) do
     args = table.raw.flatten
-    start_process(["./main"] + args)
+    start_process([executable("./main")] + args)
     sleep 0.2 # give it a sec to start. not ideal.
     ppid = PROCESSES[-1][:thread][:pid]
     child_cmd = args.first
