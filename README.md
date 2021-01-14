@@ -33,16 +33,16 @@ func (ex extension) AtExit(code int) {
 }
 
 func main() {
-  // create a new launcher using command arguments as the child process
+	// create a new launcher using command arguments as the child process
 	launcher := l.New(os.Args[1:]...)
-  // install a custom extension. An extension can respond to any/all of the
-  // above interfaces.
+	// install a custom extension. An extension can respond to any/all of the
+	// above interfaces.
 	launcher.InstallPlugin(extension{})
-  // launch the child process
+	// launch the child process
 	if err := launcher.Start(); err != nil {
 		fmt.Printf("failed to launch process: %v", err)
 	}
-  // wait until the process terminates to exit
+	// wait until the process terminates to exit
 	if err := launcher.Wait(); err != nil {
 		fmt.Printf("failed to await process: %v", err)
 	}
