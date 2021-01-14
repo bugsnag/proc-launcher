@@ -130,8 +130,9 @@ func (launcher *Launcher) forwardSignals(notifications chan os.Signal) {
 }
 
 func connectPipes(group *sync.WaitGroup, in *os.File, out *os.File, handler func([]byte)) {
+	completedGroup := false
 	defer func() {
-		if group != nil {
+		if group != nil && !completedGroup {
 			group.Done()
 		}
 	}()
@@ -139,11 +140,16 @@ func connectPipes(group *sync.WaitGroup, in *os.File, out *os.File, handler func
 	shouldQuit := false
 	for {
 		now := time.Now()
+		deadline := now.Add(time.Millisecond * 100)
 		if shouldQuit {
 			// grant extra time for final read since shutdown imminent
-			in.SetReadDeadline(now.Add(time.Second))
-		} else {
-			in.SetReadDeadline(now.Add(time.Millisecond * 100))
+			deadline = deadline.Add(time.Millisecond * 400)
+		}
+		if err := in.SetReadDeadline(deadline); err == os.ErrNoDeadline && !completedGroup {
+			if group != nil {
+				completedGroup = true
+				group.Done() // Read() may never return.
+			}
 		}
 		count, err := in.Read(contents)
 		for count > 0 {
