@@ -17,4 +17,8 @@ func TestDeadlineExceeded(t *testing.T) {
 	if !isDeadlineExceededErr(err2) {
 		t.Errorf("Failed to detect wrapped error")
 	}
+	err3 := fmt.Errorf("some other error")
+	if isDeadlineExceededErr(err3) {
+		t.Errorf("False positive deadline error")
+	}
 }
